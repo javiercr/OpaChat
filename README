@@ -1,5 +1,8 @@
-A simple real-time web chat built in Opa.
+A modificated version of the simple real-time web chat built in Opa.
+- It stores every message into the database and use a different stylesheet.
 
+javi [at] diacode.com
+ 
 BUILDING
  make
 
