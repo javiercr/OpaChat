@@ -15,13 +15,6 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-
-/**
- * A simple, one-room, scalable real-time web chat.
- *
- * @author David Rajchenbach-Teller, David@opalang.org
- */
-
 /**
  * {1 Network infrastructure}
  */
@@ -29,8 +22,27 @@
 /**
  * The type of messages sent by a client to the chatroom
  */
-type message = {author: string /**The name of the author (arbitrary string)*/
-               ; text: string  /**Content entered by the user*/}
+type message = { author: string /**The name of the author (arbitrary string)*/
+							 ; text: string	 /**Content entered by the user*/}
+
+
+/**
+ * We store the messages into the db
+ */
+db /message : intmap(message)
+
+add(author, text) =
+	/message[?] <- { ~author; ~text }
+
+fold_message(acumulator, id) =
+	message = /message[id]
+	<div class="line">
+		<div class="user">{message.author}:</div>
+		<div class="message">{message.text}</div>
+	</div>
+	<>{acumulator}</>
+	
+
 
 /**
  * The chatroom.
@@ -50,12 +62,11 @@ room = Network.cloud("room"): Network.network(message)
  * @param x The message received from the chatroom
  */
 user_update(x: message) =
-  line = <div class="line">
-            <div class="user">{x.author}:</div>
-            <div class="message">{x.text}</div>
-         </div>
-  do Dom.transform([#conversation +<- line ])
-  Dom.scroll_to_bottom(#conversation)
+	line = <div class="line">
+					<div class="user">{x.author}:</div>
+					<div class="message">{x.text}</div>
+				</div>
+	Dom.transform([#conversation -<- line ])
 
 /**
  * Broadcast text to the [room].
@@ -65,8 +76,9 @@ user_update(x: message) =
  * @param author The name of the author. Will be included in the message broadcasted.
  */
 broadcast(author) =
-   do Network.broadcast({~author text=Dom.get_value(#entry)}, room)
-   Dom.clear_value(#entry)
+	do Network.broadcast({~author text=Dom.get_value(#entry)}, room)
+	do add(author, Dom.get_value(#entry))
+	Dom.clear_value(#entry)
 
 /**
  * Build the user interface for a client.
@@ -76,11 +88,21 @@ broadcast(author) =
  * @return The user interface, ready to be sent by the server to the client on connection.
  */
 start() =
-   author = Random.string(8)
-   <div id=#header><div id=#logo></div></div>
-   <div id=#conversation onready={_ -> Network.add_callback(user_update, room)}></div>
-   <input id=#entry  onnewline={_ -> broadcast(author)}/>
-   <div class="button" onclick={_ -> broadcast(author)}>Send!</div>
+	db_messages = Db.intmap_fold_range(
+		@/message,
+		fold_message,
+		<></>, 0, none, /* acc, starting key, optional max */
+		(_ -> true) /* check range */
+	)
+	
+	author = Random.string(8)
+	   <div id=#header><div id=#logo></><div id=#playaround></></>
+	   <div id=#footer>
+	      <input id=#entry onnewline={_ -> broadcast(author)} />
+	      <div class="button" onclick={_ -> broadcast(author)}>Post</>
+	   </>
+		<div id=#conversation onready={_ -> Network.add_callback(user_update, room)}>{db_messages}</>
+	
 
 /**
  * {1 Application}
@@ -93,6 +115,6 @@ start() =
  * embedding statically the contents of directory "resources", using the global stylesheet
  * "resources/css.css" and the user interface defined in [start].
  */
-server = Server.one_page_bundle("Chat",
-       [@static_resource_directory("resources")],
-       ["resources/css.css"], start)
+server = Server.one_page_bundle("Diacode Chat",
+			 [@static_resource_directory("resources")],
+			 ["resources/css.css"], start)
